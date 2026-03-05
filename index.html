@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Tracker</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ── Supabase client ──────────────────────────────────────────
+        const SUPABASE_URL = 'https://ohvypbotqdymcrfbbbof.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_Pm0BPkdXLl6A5tijEj0LsQ_S4zXIAP7';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Lucide React Icons (inline SVG components)
+        const Clock = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        );
+
+        const Users = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+        );
+
+        const LogIn = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                <polyline points="10 17 15 12 10 7"></polyline>
+                <line x1="15" y1="12" x2="3" y2="12"></line>
+            </svg>
+        );
+
+        const LogOut = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+        );
+
+        const Shield = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+        );
+
+        const ChevronDown = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        );
+
+        const ChevronUp = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+        );
+
+        const Download = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
+
+        const AttendanceTracker = () => {
+            const [currentUser, setCurrentUser] = useState(null);
+            const [userRole, setUserRole] = useState(null);
+            const [personnel, setPersonnel] = useState({});
+            const [events, setEvents] = useState({});
+            const [sessions, setSessions] = useState([]);
+            const [pendingApprovals, setPendingApprovals] = useState([]);
+            const [selectedEvent, setSelectedEvent] = useState('');
+            const [showLogin, setShowLogin] = useState(true);
+            const [expandedSections, setExpandedSections] = useState({});
+            const [loading, setLoading] = useState(true);
+
+            // Report state
+            const [reportType, setReportType] = useState('sp');
+            const [reportSP, setReportSP] = useState('all');
+            const [reportEvent, setReportEvent] = useState('all');
+            const [reportCustomStart, setReportCustomStart] = useState('');
+            const [reportCustomEnd, setReportCustomEnd] = useState('');
+
+            // Invoice state
+            const [invoiceSP, setInvoiceSP] = useState('');
+            const [invoiceEvent, setInvoiceEvent] = useState('');
+            const [billedToName, setBilledToName] = useState('Organization Name');
+            const [billedToAddress, setBilledToAddress] = useState('123 Main Street, City, State 00000');
+            const [editingBilledTo, setEditingBilledTo] = useState(false);
+            
+            const [loginId, setLoginId] = useState('');
+            const [loginPin, setLoginPin] = useState('');
+            const [loginError, setLoginError] = useState('');
+
+            const [newEventCode, setNewEventCode] = useState('');
+            const [newEventName, setNewEventName] = useState('');
+            const [newPersonnelId, setNewPersonnelId] = useState('');
+            const [newPersonnelName, setNewPersonnelName] = useState('');
+            const [newPersonnelPin, setNewPersonnelPin] = useState('');
+            const [newPersonnelRole, setNewPersonnelRole] = useState('personnel');
+
+            useEffect(() => {
+                loadData();
+            }, []);
+
+            useEffect(() => {
+                // saveData is a no-op — Supabase handles persistence inline
+            }, [personnel, events, sessions, pendingApprovals]);
+
+            const normSession = s => ({
+                ...s,
+                personnelId: s.personnelid || s.personnelId,
+                personnelName: s.personnelname || s.personnelName,
+                eventCode: s.eventcode || s.eventCode,
+                signInTime: s.signintime || s.signInTime,
+                signOutTime: s.signouttime || s.signOutTime || null,
+                approvedBy: s.approvedby || s.approvedBy,
+                approvedAt: s.approvedat || s.approvedAt,
+                signOutApprovedBy: s.signoutapprovedby || s.signOutApprovedBy,
+                signOutApprovedAt: s.signoutapprovedat || s.signOutApprovedAt,
+            });
+
+            const normPending = p => ({
+                ...p,
+                personnelId: p.personnelid || p.personnelId,
+                personnelName: p.personnelname || p.personnelName,
+                eventCode: p.eventcode || p.eventCode,
+                requestTime: p.requesttime || p.requestTime,
+                sessionId: p.sessionid || p.sessionId,
+                approvedBy: p.approvedby || p.approvedBy,
+                approvedAt: p.approvedat || p.approvedAt,
+                deniedBy: p.deniedby || p.deniedBy,
+                deniedAt: p.deniedat || p.deniedAt,
+            });
+
+            const loadData = async () => {
+                try {
+                    const [{ data: personnelData }, { data: eventsData }, { data: sessionsData }, { data: pendingData }] = await Promise.all([
+                        supabase.from('personnel').select('*'),
+                        supabase.from('events').select('*'),
+                        supabase.from('sessions').select('*'),
+                        supabase.from('pending_approvals').select('*'),
+                    ]);
+
+                    const personnelMap = {};
+                    (personnelData || []).forEach(p => { personnelMap[p.id] = p; });
+
+                    if (Object.keys(personnelMap).length === 0) {
+                        const defaultAdmin = { id: 'admin', name: 'Administrator', pin: '1234', role: 'admin' };
+                        await supabase.from('personnel').insert([defaultAdmin]);
+                        personnelMap['admin'] = defaultAdmin;
+                    }
+                    setPersonnel(personnelMap);
+
+                    const eventsMap = {};
+                    (eventsData || []).forEach(e => { eventsMap[e.code] = e; });
+                    setEvents(eventsMap);
+
+                    setSessions((sessionsData || []).map(normSession));
+                    setPendingApprovals((pendingData || []).map(normPending));
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    setPersonnel({ 'admin': { id: 'admin', name: 'Administrator', pin: '1234', role: 'admin' } });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const createDefaultAdmin = async () => {
+                const defaultAdmin = { id: 'admin', name: 'Administrator', pin: '1234', role: 'admin' };
+                await supabase.from('personnel').upsert([defaultAdmin]);
+                setPersonnel({ 'admin': defaultAdmin });
+                alert('Admin account reset to default credentials');
+            };
+
+            const saveData = () => {
+                // No-op: Supabase saves are done inline at each operation
+            };
+
+            const handleLogin = () => {
+                const user = personnel[loginId];
+                if (!user) {
+                    setLoginError('Personnel ID not found');
+                    return;
+                }
+                if (user.pin !== loginPin) {
+                    setLoginError('Incorrect PIN');
+                    return;
+                }
+                setCurrentUser(user);
+                setUserRole(user.role);
+                setShowLogin(false);
+                setLoginError('');
+                setLoginId('');
+                setLoginPin('');
+            };
+
+            const handleLogout = () => {
+                setCurrentUser(null);
+                setUserRole(null);
+                setShowLogin(true);
+                setSelectedEvent('');
+            };
+
+            const handleSignIn = async () => {
+                if (!selectedEvent) {
+                    alert('Please select an event code');
+                    return;
+                }
+
+                const hasPendingSignIn = pendingApprovals.some(
+                    p => p.personnelId === currentUser.id && 
+                    p.eventCode === selectedEvent && 
+                    p.type === 'sign-in' &&
+                    p.status === 'pending'
+                );
+
+                if (hasPendingSignIn) {
+                    alert('You already have a pending sign-in request for this event. Please wait for admin approval.');
+                    return;
+                }
+
+                const hasActiveSession = sessions.some(
+                    s => s.personnelId === currentUser.id && 
+                    s.eventCode === selectedEvent && 
+                    !s.signOutTime
+                );
+
+                if (hasActiveSession) {
+                    alert('You are already signed in to this event.');
+                    return;
+                }
+
+                const pendingRequest = {
+                    id: Date.now().toString(),
+                    type: 'sign-in',
+                    personnelid: currentUser.id,
+                    personnelname: currentUser.name,
+                    eventcode: selectedEvent,
+                    requesttime: new Date().toISOString(),
+                    status: 'pending'
+                };
+
+                const { data, error } = await supabase.from('pending_approvals').insert([pendingRequest]).select();
+                if (!error && data) {
+                    setPendingApprovals([...pendingApprovals, {...pendingRequest, personnelId: pendingRequest.personnelid, personnelName: pendingRequest.personnelname, eventCode: pendingRequest.eventcode, requestTime: pendingRequest.requesttime}]);
+                }
+                alert('Sign-in request submitted. Please wait for administrator approval.');
+            };
+
+            const handleSignOut = async () => {
+                const activeSession = sessions.find(
+                    s => s.personnelId === currentUser.id && 
+                    s.eventCode === selectedEvent && 
+                    !s.signOutTime
+                );
+
+                if (!activeSession) {
+                    alert('No active session found for this event');
+                    return;
+                }
+
+                const hasPendingSignOut = pendingApprovals.some(
+                    p => p.sessionId === activeSession.id && 
+                    p.type === 'sign-out' &&
+                    p.status === 'pending'
+                );
+
+                if (hasPendingSignOut) {
+                    alert('You already have a pending sign-out request. Please wait for admin approval.');
+                    return;
+                }
+
+                const pendingRequest = {
+                    id: Date.now().toString(),
+                    type: 'sign-out',
+                    sessionid: activeSession.id,
+                    personnelid: currentUser.id,
+                    personnelname: currentUser.name,
+                    eventcode: selectedEvent,
+                    requesttime: new Date().toISOString(),
+                    status: 'pending'
+                };
+
+                const { data, error } = await supabase.from('pending_approvals').insert([pendingRequest]).select();
+                if (!error && data) {
+                    setPendingApprovals([...pendingApprovals, {...pendingRequest, sessionId: pendingRequest.sessionid, personnelId: pendingRequest.personnelid, personnelName: pendingRequest.personnelname, eventCode: pendingRequest.eventcode, requestTime: pendingRequest.requesttime}]);
+                }
+                alert('Sign-out request submitted. Please wait for administrator approval.');
+            };
+
+            const approveRequest = async (requestId) => {
+                const request = pendingApprovals.find(p => p.id === requestId);
+                if (!request) return;
+
+                if (request.type === 'sign-in') {
+                    const newSession = {
+                        id: Date.now().toString(),
+                        personnelid: request.personnelId || request.personnelid,
+                        personnelname: request.personnelName || request.personnelname,
+                        eventcode: request.eventCode || request.eventcode,
+                        signintime: request.requestTime || request.requesttime,
+                        signouttime: null,
+                        approvedby: currentUser.name,
+                        approvedat: new Date().toISOString()
+                    };
+                    const { data } = await supabase.from('sessions').insert([newSession]).select();
+                    if (data) {
+                        const normalized = { ...newSession, personnelId: newSession.personnelid, personnelName: newSession.personnelname, eventCode: newSession.eventcode, signInTime: newSession.signintime, signOutTime: null, approvedBy: newSession.approvedby, approvedAt: newSession.approvedat };
+                        setSessions([...sessions, normalized]);
+                    }
+                } else if (request.type === 'sign-out') {
+                    const sid = request.sessionId || request.sessionid;
+                    const now = new Date().toISOString();
+                    await supabase.from('sessions').update({ signouttime: request.requestTime || request.requesttime, signoutapprovedby: currentUser.name, signoutapprovedat: now }).eq('id', sid);
+                    setSessions(sessions.map(s =>
+                        s.id === sid
+                            ? { ...s, signOutTime: request.requestTime || request.requesttime, signOutApprovedBy: currentUser.name, signOutApprovedAt: now }
+                            : s
+                    ));
+                }
+
+                await supabase.from('pending_approvals').update({ status: 'approved', approvedby: currentUser.name, approvedat: new Date().toISOString() }).eq('id', requestId);
+                setPendingApprovals(pendingApprovals.map(p =>
+                    p.id === requestId
+                        ? { ...p, status: 'approved', approvedBy: currentUser.name, approvedAt: new Date().toISOString() }
+                        : p
+                ));
+            };
+
+            const denyRequest = async (requestId) => {
+                await supabase.from('pending_approvals').update({ status: 'denied', deniedby: currentUser.name, deniedat: new Date().toISOString() }).eq('id', requestId);
+                setPendingApprovals(pendingApprovals.map(p =>
+                    p.id === requestId
+                        ? { ...p, status: 'denied', deniedBy: currentUser.name, deniedAt: new Date().toISOString() }
+                        : p
+                ));
+            };
+
+            const addEvent = async () => {
+                if (!newEventCode || !newEventName) {
+                    alert('Please enter both event code and name');
+                    return;
+                }
+                const newEvent = { code: newEventCode, name: newEventName };
+                const { error } = await supabase.from('events').insert([newEvent]);
+                if (error) { alert('Error adding event: ' + error.message); return; }
+                setEvents({ ...events, [newEventCode]: newEvent });
+                setNewEventCode('');
+                setNewEventName('');
+            };
+
+            const addPersonnel = async () => {
+                if (!newPersonnelId || !newPersonnelName || !newPersonnelPin) {
+                    alert('Please fill in all fields');
+                    return;
+                }
+                if (personnel[newPersonnelId]) {
+                    alert('Personnel ID already exists');
+                    return;
+                }
+                const newPerson = { id: newPersonnelId, name: newPersonnelName, pin: newPersonnelPin, role: newPersonnelRole };
+                const { error } = await supabase.from('personnel').insert([newPerson]);
+                if (error) { alert('Error adding personnel: ' + error.message); return; }
+                setPersonnel({ ...personnel, [newPersonnelId]: newPerson });
+                setNewPersonnelId('');
+                setNewPersonnelName('');
+                setNewPersonnelPin('');
+                setNewPersonnelRole('personnel');
+            };
+
+            const calculateDuration = (signIn, signOut) => {
+                if (!signOut) return 'Active';
+                const diff = new Date(signOut) - new Date(signIn);
+                const hours = Math.floor(diff / 3600000);
+                const minutes = Math.floor((diff % 3600000) / 60000);
+                return `${hours}h ${minutes}m`;
+            };
+
+            const getTodaysSessions = (personnelId) => {
+                const today = new Date().toDateString();
+                return sessions.filter(s => 
+                    s.personnelId === personnelId && 
+                    new Date(s.signInTime).toDateString() === today
+                );
+            };
+
+            const calculateTodayTotal = (personnelId) => {
+                const todaySessions = getTodaysSessions(personnelId);
+                let totalMinutes = 0;
+                
+                todaySessions.forEach(session => {
+                    if (session.signOutTime) {
+                        const diff = new Date(session.signOutTime) - new Date(session.signInTime);
+                        totalMinutes += diff / 60000;
+                    }
+                });
+
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = Math.floor(totalMinutes % 60);
+                return `${hours}h ${minutes}m`;
+            };
+
+            const calculateTotalMinutes = (sessions) => {
+                let totalMinutes = 0;
+                sessions.forEach(session => {
+                    if (session.signOutTime) {
+                        const diff = new Date(session.signOutTime) - new Date(session.signInTime);
+                        totalMinutes += diff / 60000;
+                    }
+                });
+                return totalMinutes;
+            };
+
+            const formatTimeWithPay = (totalMinutes) => {
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = Math.floor(totalMinutes % 60);
+                const pay = (totalMinutes / 60) * 25;
+                return {
+                    time: `${hours}h ${minutes}m`,
+                    hours: (totalMinutes / 60).toFixed(2),
+                    pay: pay.toFixed(2)
+                };
+            };
+
+            const calculatePersonnelEventTotals = (personnelId) => {
+                const personnelSessions = sessions.filter(s => s.personnelId === personnelId && s.signOutTime);
+                const eventTotals = {};
+                let grandTotal = 0;
+
+                personnelSessions.forEach(session => {
+                    const minutes = (new Date(session.signOutTime) - new Date(session.signInTime)) / 60000;
+                    if (!eventTotals[session.eventCode]) {
+                        eventTotals[session.eventCode] = 0;
+                    }
+                    eventTotals[session.eventCode] += minutes;
+                    grandTotal += minutes;
+                });
+
+                return { eventTotals, grandTotal };
+            };
+
+            const calculateEventTotals = (eventCode) => {
+                const eventSessions = sessions.filter(s => s.eventCode === eventCode && s.signOutTime);
+                const personnelTotals = {};
+                let eventGrandTotal = 0;
+
+                eventSessions.forEach(session => {
+                    const minutes = (new Date(session.signOutTime) - new Date(session.signInTime)) / 60000;
+                    if (!personnelTotals[session.personnelId]) {
+                        personnelTotals[session.personnelId] = {
+                            name: session.personnelName,
+                            minutes: 0
+                        };
+                    }
+                    personnelTotals[session.personnelId].minutes += minutes;
+                    eventGrandTotal += minutes;
+                });
+
+                return { personnelTotals, eventGrandTotal };
+            };
+
+            const getSessionsByEvent = () => {
+                const grouped = {};
+                sessions.forEach(session => {
+                    if (!grouped[session.eventCode]) {
+                        grouped[session.eventCode] = [];
+                    }
+                    grouped[session.eventCode].push(session);
+                });
+                return grouped;
+            };
+
+            const exportReport = () => {
+                const csvContent = [
+                    ['Personnel ID', 'Personnel Name', 'Event Code', 'Sign In', 'Sign Out', 'Duration', 'Hours', 'Pay ($25/hr)'].join(','),
+                    ...sessions.map(s => {
+                        const minutes = s.signOutTime 
+                            ? (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000
+                            : 0;
+                        const formatted = formatTimeWithPay(minutes);
+                        return [
+                            s.personnelId,
+                            s.personnelName,
+                            s.eventCode,
+                            new Date(s.signInTime).toLocaleString(),
+                            s.signOutTime ? new Date(s.signOutTime).toLocaleString() : 'Active',
+                            calculateDuration(s.signInTime, s.signOutTime),
+                            s.signOutTime ? formatted.hours : '0',
+                            s.signOutTime ? formatted.pay : '0.00'
+                        ].join(',');
+                    })
+                ].join('\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+            };
+
+            const toggleSection = (section) => {
+                setExpandedSections(prev => ({
+                    ...prev,
+                    [section]: !prev[section]
+                }));
+            };
+
+            // ── Report date range helpers ──────────────────────────────
+            const getDateRange = () => {
+                if (!reportCustomStart || !reportCustomEnd) return { start: null, end: null, label: '' };
+                return {
+                    start: new Date(reportCustomStart + 'T00:00:00'),
+                    end: new Date(reportCustomEnd + 'T23:59:59'),
+                    label: `${reportCustomStart} to ${reportCustomEnd}`
+                };
+            };
+
+            const filterSessionsByRange = (sessArr, start, end) => {
+                if (!start || !end) return sessArr;
+                return sessArr.filter(s => {
+                    const t = new Date(s.signInTime);
+                    return t >= start && t <= end;
+                });
+            };
+
+            // ── PDF generation ─────────────────────────────────────────
+            const generatePDFContent = () => {
+                const { start, end, label } = getDateRange();
+                if (!start || !end) { alert('Please select a start and end date.'); return null; }
+
+                const filtered = filterSessionsByRange(sessions.filter(s => s.signOutTime), start, end);
+
+                let title, rows, summaryRows;
+
+                if (reportType === 'sp') {
+                    // Filter by specific SP or all
+                    const spList = reportSP === 'all'
+                        ? Object.values(personnel).filter(p => p.role !== 'admin')
+                        : [personnel[reportSP]].filter(Boolean);
+
+                    title = reportSP === 'all' ? 'All SPs Report' : `SP Report: ${personnel[reportSP]?.name || reportSP}`;
+
+                    rows = spList.map(sp => {
+                        const spSessions = filtered.filter(s => s.personnelId === sp.id);
+                        const byEvent = {};
+                        spSessions.forEach(s => {
+                            const mins = (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000;
+                            if (!byEvent[s.eventCode]) byEvent[s.eventCode] = 0;
+                            byEvent[s.eventCode] += mins;
+                        });
+                        const totalMins = spSessions.reduce((acc, s) =>
+                            acc + (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000, 0);
+                        return { sp, byEvent, totalMins };
+                    });
+
+                } else {
+                    // By event
+                    const eventList = reportEvent === 'all'
+                        ? Object.values(events)
+                        : [events[reportEvent]].filter(Boolean);
+
+                    title = reportEvent === 'all' ? 'All Events Report' : `Event Report: ${events[reportEvent]?.name || reportEvent}`;
+
+                    rows = eventList.map(ev => {
+                        const evSessions = filtered.filter(s => s.eventCode === ev.code);
+                        const byPerson = {};
+                        evSessions.forEach(s => {
+                            const mins = (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000;
+                            if (!byPerson[s.personnelId]) byPerson[s.personnelId] = { name: s.personnelName, mins: 0 };
+                            byPerson[s.personnelId].mins += mins;
+                        });
+                        const totalMins = evSessions.reduce((acc, s) =>
+                            acc + (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000, 0);
+                        return { ev, byPerson, totalMins };
+                    });
+                }
+
+                return { title, rows, label, start, end, reportType };
+            };
+
+            const buildPDFHtml = (data) => {
+                const { title, rows, label, reportType } = data;
+                const now = new Date().toLocaleString();
+                const fmtMins = m => {
+                    const h = Math.floor(m / 60), mn = Math.round(m % 60);
+                    return `${h}h ${mn.toString().padStart(2,'0')}m`;
+                };
+                const fmtPay = m => `$${((m / 60) * 25).toFixed(2)}`;
+                const fmtHrs = m => (m / 60).toFixed(2);
+
+                let bodyHtml = '';
+
+                if (reportType === 'sp') {
+                    rows.forEach(({ sp, byEvent, totalMins }) => {
+                        const breakdownRows = Object.entries(byEvent).map(([code, mins]) =>
+                            `<tr>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${events[code]?.name || code}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#374151;">${code}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtHrs(mins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtMins(mins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:#059669;">${fmtPay(mins)}</td>
+                            </tr>`
+                        ).join('');
+
+                        bodyHtml += `
+                        <div style="margin-bottom:28px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;page-break-inside:avoid;">
+                            <div style="background:#4f46e5;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;">
+                                <span style="color:white;font-weight:700;font-size:15px;">${sp.name}</span>
+                                <span style="color:#c7d2fe;font-size:12px;">ID: ${sp.id}</span>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <thead>
+                                    <tr style="background:#f3f4f6;">
+                                        <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">Event Name</th>
+                                        <th style="padding:8px 12px;text-align:center;color:#6b7280;font-weight:600;">Code</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Hours</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Time</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Pay</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${breakdownRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#9ca3af;">No sessions in this period</td></tr>'}
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background:#f0fdf4;border-top:2px solid #d1fae5;">
+                                        <td colspan="2" style="padding:10px 12px;font-weight:700;color:#065f46;">Total</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtHrs(totalMins)}</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtMins(totalMins)}</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#059669;font-size:15px;">${fmtPay(totalMins)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>`;
+                    });
+
+                    // Grand summary table (all SPs)
+                    if (rows.length > 1) {
+                        const summaryRows = rows.map(({ sp, totalMins }) =>
+                            `<tr>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${sp.name}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;">${sp.id}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtHrs(totalMins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:#059669;">${fmtPay(totalMins)}</td>
+                            </tr>`
+                        ).join('');
+                        const grandTotal = rows.reduce((a, r) => a + r.totalMins, 0);
+
+                        bodyHtml = `
+                        <div style="margin-bottom:32px;border:2px solid #4f46e5;border-radius:8px;overflow:hidden;">
+                            <div style="background:#4f46e5;padding:10px 16px;">
+                                <span style="color:white;font-weight:700;font-size:15px;">Summary – All SPs</span>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <thead><tr style="background:#f3f4f6;">
+                                    <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">SP Name</th>
+                                    <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">ID</th>
+                                    <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Hours</th>
+                                    <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Pay</th>
+                                </tr></thead>
+                                <tbody>${summaryRows}</tbody>
+                                <tfoot><tr style="background:#f0fdf4;border-top:2px solid #d1fae5;">
+                                    <td colspan="2" style="padding:10px 12px;font-weight:700;color:#065f46;">Grand Total</td>
+                                    <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtHrs(grandTotal)}</td>
+                                    <td style="padding:10px 12px;text-align:right;font-weight:700;color:#059669;font-size:15px;">${fmtPay(grandTotal)}</td>
+                                </tr></tfoot>
+                            </table>
+                        </div>` + bodyHtml;
+                    }
+
+                } else {
+                    // By event
+                    rows.forEach(({ ev, byPerson, totalMins }) => {
+                        const breakdownRows = Object.entries(byPerson).map(([pid, { name, mins }]) =>
+                            `<tr>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${name}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280;">${pid}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtHrs(mins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtMins(mins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:#059669;">${fmtPay(mins)}</td>
+                            </tr>`
+                        ).join('');
+
+                        bodyHtml += `
+                        <div style="margin-bottom:28px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;page-break-inside:avoid;">
+                            <div style="background:#0891b2;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;">
+                                <span style="color:white;font-weight:700;font-size:15px;">${ev.name}</span>
+                                <span style="color:#cffafe;font-size:12px;">Code: ${ev.code}</span>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <thead>
+                                    <tr style="background:#f3f4f6;">
+                                        <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">SP Name</th>
+                                        <th style="padding:8px 12px;text-align:center;color:#6b7280;font-weight:600;">ID</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Hours</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Time</th>
+                                        <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Pay</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${breakdownRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#9ca3af;">No sessions in this period</td></tr>'}
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background:#f0fdf4;border-top:2px solid #d1fae5;">
+                                        <td colspan="2" style="padding:10px 12px;font-weight:700;color:#065f46;">Total</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtHrs(totalMins)}</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtMins(totalMins)}</td>
+                                        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#059669;font-size:15px;">${fmtPay(totalMins)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>`;
+                    });
+
+                    if (rows.length > 1) {
+                        const summaryRows = rows.map(({ ev, totalMins }) =>
+                            `<tr>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${ev.name}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;">${ev.code}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${fmtHrs(totalMins)}</td>
+                                <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:#059669;">${fmtPay(totalMins)}</td>
+                            </tr>`
+                        ).join('');
+                        const grandTotal = rows.reduce((a, r) => a + r.totalMins, 0);
+
+                        bodyHtml = `
+                        <div style="margin-bottom:32px;border:2px solid #0891b2;border-radius:8px;overflow:hidden;">
+                            <div style="background:#0891b2;padding:10px 16px;">
+                                <span style="color:white;font-weight:700;font-size:15px;">Summary – All Events</span>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <thead><tr style="background:#f3f4f6;">
+                                    <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">Event Name</th>
+                                    <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">Code</th>
+                                    <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Hours</th>
+                                    <th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">Pay</th>
+                                </tr></thead>
+                                <tbody>${summaryRows}</tbody>
+                                <tfoot><tr style="background:#f0fdf4;border-top:2px solid #d1fae5;">
+                                    <td colspan="2" style="padding:10px 12px;font-weight:700;color:#065f46;">Grand Total</td>
+                                    <td style="padding:10px 12px;text-align:right;font-weight:700;color:#065f46;">${fmtHrs(grandTotal)}</td>
+                                    <td style="padding:10px 12px;text-align:right;font-weight:700;color:#059669;font-size:15px;">${fmtPay(grandTotal)}</td>
+                                </tr></tfoot>
+                            </table>
+                        </div>` + bodyHtml;
+                    }
+                }
+
+                return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111827; background: white; padding: 32px; }
+  @media print { body { padding: 16px; } }
+</style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #4f46e5;">
+    <div>
+      <h1 style="font-size:22px;font-weight:800;color:#1e1b4b;margin-bottom:4px;">Attendance Tracker</h1>
+      <h2 style="font-size:16px;font-weight:600;color:#4f46e5;margin-bottom:2px;">${title}</h2>
+      <p style="font-size:13px;color:#6b7280;">Period: ${label}</p>
+    </div>
+    <div style="text-align:right;">
+      <p style="font-size:11px;color:#9ca3af;">Generated by Administrator</p>
+      <p style="font-size:11px;color:#9ca3af;">${now}</p>
+    </div>
+  </div>
+  ${bodyHtml}
+  <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;">
+    <p style="font-size:11px;color:#9ca3af;">Attendance Tracker • Rate: $25.00/hr • ${now}</p>
+  </div>
+</body>
+</html>`;
+            };
+
+            const generateInvoice = () => {
+                if (!invoiceSP) { alert('Please select an SP.'); return; }
+                if (!invoiceEvent) { alert('Please select an Event.'); return; }
+
+                const sp = personnel[invoiceSP];
+                const ev = events[invoiceEvent];
+                if (!sp || !ev) { alert('Invalid SP or Event selection.'); return; }
+
+                const spSessions = sessions.filter(s =>
+                    s.personnelId === invoiceSP &&
+                    s.eventCode === invoiceEvent &&
+                    s.signOutTime
+                );
+
+                if (spSessions.length === 0) {
+                    alert(`No completed sessions found for ${sp.name} in event ${ev.name}.`);
+                    return;
+                }
+
+                const totalMins = spSessions.reduce((acc, s) =>
+                    acc + (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000, 0);
+                const totalHours = (totalMins / 60).toFixed(2);
+                const totalPay = ((totalMins / 60) * 25).toFixed(2);
+                const now = new Date();
+                const invoiceDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                const fmtMins = m => {
+                    const h = Math.floor(m / 60), mn = Math.round(m % 60);
+                    return `${h}h ${mn.toString().padStart(2,'0')}m`;
+                };
+
+                const sessionRows = spSessions.map((s, i) => {
+                    const mins = (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000;
+                    const hrs = (mins / 60).toFixed(2);
+                    const pay = ((mins / 60) * 25).toFixed(2);
+                    const date = new Date(s.signInTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    const inTime = new Date(s.signInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    const outTime = new Date(s.signOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    return `<tr style="background:${i % 2 === 0 ? '#ffffff' : '#f9fafb'};">
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;color:#374151;">${date}</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;color:#374151;">${inTime}</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;color:#374151;">${outTime}</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;text-align:center;color:#374151;">${fmtMins(mins)}</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">${hrs}</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;text-align:right;color:#374151;">$25.00</td>
+                        <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:#059669;">$${pay}</td>
+                    </tr>`;
+                }).join('');
+
+                const invoiceHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice ${ev.code} – ${sp.name}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111827; background: white; padding: 40px; max-width: 800px; margin: 0 auto; }
+  @media print { body { padding: 20px; } @page { margin: 0.5in; } }
+</style>
+</head>
+<body>
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
+    <div>
+      <h1 style="font-size:32px;font-weight:900;color:#4f46e5;letter-spacing:-1px;margin-bottom:4px;">INVOICE</h1>
+      <p style="font-size:18px;font-weight:700;color:#1e1b4b;"># ${ev.code}</p>
+    </div>
+    <div style="text-align:right;">
+      <p style="font-size:12px;color:#6b7280;margin-bottom:2px;">Date Issued</p>
+      <p style="font-size:14px;font-weight:600;color:#111827;">${invoiceDate}</p>
+    </div>
+  </div>
+
+  <!-- Billed To / From -->
+  <div style="display:flex;gap:40px;margin-bottom:36px;padding:20px 24px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+    <div style="flex:1;">
+      <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:6px;">Billed To</p>
+      <p style="font-size:15px;font-weight:700;color:#111827;">${billedToName}</p>
+      <p style="font-size:13px;color:#6b7280;margin-top:2px;">${billedToAddress}</p>
+    </div>
+    <div style="flex:1;">
+      <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:6px;">Service Provider</p>
+      <p style="font-size:15px;font-weight:700;color:#111827;">${sp.name}</p>
+      <p style="font-size:13px;color:#6b7280;margin-top:2px;">SP ID: ${sp.id}</p>
+    </div>
+    <div style="flex:1;">
+      <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:6px;">Event</p>
+      <p style="font-size:15px;font-weight:700;color:#111827;">${ev.name}</p>
+      <p style="font-size:13px;color:#6b7280;margin-top:2px;">Code: ${ev.code}</p>
+    </div>
+  </div>
+
+  <!-- Session Table -->
+  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+    <thead>
+      <tr style="background:#4f46e5;">
+        <th style="padding:10px 14px;text-align:left;color:white;font-weight:600;border-radius:0;">Date</th>
+        <th style="padding:10px 14px;text-align:left;color:white;font-weight:600;">Sign In</th>
+        <th style="padding:10px 14px;text-align:left;color:white;font-weight:600;">Sign Out</th>
+        <th style="padding:10px 14px;text-align:center;color:white;font-weight:600;">Duration</th>
+        <th style="padding:10px 14px;text-align:right;color:white;font-weight:600;">Hours</th>
+        <th style="padding:10px 14px;text-align:right;color:white;font-weight:600;">Rate</th>
+        <th style="padding:10px 14px;text-align:right;color:white;font-weight:600;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${sessionRows}</tbody>
+    <tfoot>
+      <tr style="background:#f0fdf4;border-top:2px solid #059669;">
+        <td colspan="4" style="padding:12px 14px;font-weight:700;color:#065f46;font-size:14px;">TOTAL</td>
+        <td style="padding:12px 14px;text-align:right;font-weight:700;color:#065f46;">${totalHours} hrs</td>
+        <td style="padding:12px 14px;text-align:right;font-weight:700;color:#065f46;">$25.00</td>
+        <td style="padding:12px 14px;text-align:right;font-weight:800;color:#059669;font-size:18px;">$${totalPay}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- Amount Due Box -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:36px;">
+    <div style="background:#4f46e5;color:white;padding:16px 28px;border-radius:10px;text-align:right;min-width:220px;">
+      <p style="font-size:12px;font-weight:600;opacity:0.8;margin-bottom:4px;">AMOUNT DUE</p>
+      <p style="font-size:28px;font-weight:900;letter-spacing:-0.5px;">$${totalPay}</p>
+      <p style="font-size:11px;opacity:0.7;margin-top:2px;">${totalHours} hours @ $25.00/hr</p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;">
+    <p style="font-size:11px;color:#9ca3af;">Generated by Attendance Tracker • ${invoiceDate} • Invoice ${ev.code}</p>
+  </div>
+</body>
+</html>`;
+
+                const win = window.open('', '_blank');
+                if (!win) { alert('Please allow popups to generate the invoice.'); return; }
+                win.document.write(invoiceHtml);
+                win.document.close();
+                setTimeout(() => win.print(), 500);
+            };
+
+            const generatePDF = () => {
+                const data = generatePDFContent();
+                if (!data) return;
+                const html = buildPDFHtml(data);
+                const win = window.open('', '_blank');
+                if (!win) { alert('Please allow popups to generate the PDF.'); return; }
+                win.document.write(html);
+                win.document.close();
+                setTimeout(() => win.print(), 500);
+            };
+
+            const isSignedIn = () => {
+                if (!selectedEvent) return false;
+                return sessions.some(
+                    s => s.personnelId === currentUser.id && 
+                    s.eventCode === selectedEvent && 
+                    !s.signOutTime
+                );
+            };
+
+            const hasPendingSignIn = () => {
+                if (!selectedEvent) return false;
+                return pendingApprovals.some(
+                    p => p.personnelId === currentUser.id && 
+                    p.eventCode === selectedEvent && 
+                    p.type === 'sign-in' &&
+                    p.status === 'pending'
+                );
+            };
+
+            const hasPendingSignOut = () => {
+                if (!selectedEvent) return false;
+                const activeSession = sessions.find(
+                    s => s.personnelId === currentUser.id && 
+                    s.eventCode === selectedEvent && 
+                    !s.signOutTime
+                );
+                if (!activeSession) return false;
+                return pendingApprovals.some(
+                    p => p.sessionId === activeSession.id && 
+                    p.type === 'sign-out' &&
+                    p.status === 'pending'
+                );
+            };
+
+            const getPendingCount = () => {
+                return pendingApprovals.filter(p => p.status === 'pending').length;
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="bg-indigo-600 rounded-full p-4 inline-block mb-4 animate-pulse">
+                                <Clock className="w-12 h-12 text-white" />
+                            </div>
+                            <p className="text-xl font-semibold text-indigo-900">Loading Attendance Tracker...</p>
+                            <p className="text-sm text-indigo-600 mt-2">Connecting to database</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (showLogin) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                            <div className="flex justify-center mb-6">
+                                <div className="bg-indigo-600 rounded-full p-4">
+                                    <Users className="w-12 h-12 text-white" />
+                                </div>
+                            </div>
+                            <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+                                Attendance Tracker
+                            </h1>
+                            <p className="text-center text-gray-600 mb-8">Sign in to continue</p>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Personnel ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={loginId}
+                                        onChange={(e) => setLoginId(e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        placeholder="Enter your ID"
+                                        onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        PIN
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={loginPin}
+                                        onChange={(e) => setLoginPin(e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        placeholder="Enter your PIN"
+                                        onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                    />
+                                </div>
+
+                                {loginError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                                        {loginError}
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={handleLogin}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+                                >
+                                    <LogIn className="w-5 h-5" />
+                                    Sign In
+                                </button>
+                            </div>
+
+                            <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
+                                <p className="font-semibold mb-2">Default Credentials:</p>
+                                <p>Admin ID: <span className="font-mono font-semibold">admin</span></p>
+                                <p>Admin PIN: <span className="font-mono font-semibold">1234</span></p>
+                                
+                                <button
+                                    onClick={() => {
+                                        createDefaultAdmin();
+                                        alert('Admin account reset to default credentials');
+                                    }}
+                                    className="mt-3 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition duration-200"
+                                >
+                                    Reset to Default Admin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <div className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-indigo-600 rounded-lg p-2">
+                                        <Clock className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-2xl font-bold text-gray-900">Attendance Tracker</h1>
+                                        <p className="text-sm text-gray-600">
+                                            Welcome, {currentUser.name} 
+                                            {userRole === 'admin' && (
+                                                <>
+                                                    <span className="ml-2 text-indigo-600 font-semibold">• Administrator</span>
+                                                    {getPendingCount() > 0 && (
+                                                        <span className="ml-2 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-bold animate-pulse">
+                                                            {getPendingCount()} Pending
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleLogout}
+                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition duration-200"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+                        {userRole === 'personnel' && (
+                            <div className="space-y-6">
+                                {(() => {
+                                    const myPending = pendingApprovals.filter(
+                                        p => p.personnelId === currentUser.id && p.status === 'pending'
+                                    );
+                                    if (myPending.length > 0) {
+                                        return (
+                                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                                                <div className="flex items-start">
+                                                    <Clock className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
+                                                    <div>
+                                                        <h3 className="text-sm font-semibold text-yellow-800">
+                                                            Pending Approval Required
+                                                        </h3>
+                                                        <p className="text-sm text-yellow-700 mt-1">
+                                                            You have {myPending.length} request{myPending.length > 1 ? 's' : ''} awaiting administrator approval.
+                                                        </p>
+                                                        <div className="mt-2 space-y-1">
+                                                            {myPending.map(req => (
+                                                                <p key={req.id} className="text-xs text-yellow-600">
+                                                                    • {req.type === 'sign-in' ? 'Sign-in' : 'Sign-out'} for {events[req.eventCode]?.name || req.eventCode}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-4">Time Tracking</h2>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Select Event Code
+                                            </label>
+                                            <select
+                                                value={selectedEvent}
+                                                onChange={(e) => setSelectedEvent(e.target.value)}
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="">Choose an event...</option>
+                                                {Object.values(events).map(event => (
+                                                    <option key={event.code} value={event.code}>
+                                                        {event.code} - {event.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={handleSignIn}
+                                                disabled={!selectedEvent || isSignedIn() || hasPendingSignIn()}
+                                                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+                                            >
+                                                <LogIn className="w-5 h-5" />
+                                                {hasPendingSignIn() ? 'Pending Approval...' : 'Sign In'}
+                                            </button>
+                                            <button
+                                                onClick={handleSignOut}
+                                                disabled={!selectedEvent || !isSignedIn() || hasPendingSignOut()}
+                                                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+                                            >
+                                                <LogOut className="w-5 h-5" />
+                                                {hasPendingSignOut() ? 'Pending Approval...' : 'Sign Out'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-4">Today's Summary</h2>
+                                    
+                                    <div className="bg-indigo-50 rounded-lg p-6 mb-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-sm text-indigo-600 font-medium mb-1">Total Time Today</p>
+                                                <p className="text-3xl font-bold text-indigo-900">
+                                                    {calculateTodayTotal(currentUser.id)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-indigo-600 font-medium mb-1">Today's Earnings</p>
+                                                <p className="text-3xl font-bold text-indigo-900">
+                                                    ${formatTimeWithPay(calculateTotalMinutes(getTodaysSessions(currentUser.id))).pay}
+                                                </p>
+                                                <p className="text-xs text-indigo-600 mt-1">@ $25.00/hour</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {getTodaysSessions(currentUser.id).map(session => (
+                                            <div key={session.id} className="border border-gray-200 rounded-lg p-4">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div>
+                                                        <p className="font-semibold text-gray-900">{events[session.eventCode]?.name}</p>
+                                                        <p className="text-sm text-gray-500">{session.eventCode}</p>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                        session.signOutTime 
+                                                            ? 'bg-gray-100 text-gray-700' 
+                                                            : 'bg-green-100 text-green-700'
+                                                    }`}>
+                                                        {session.signOutTime ? 'Completed' : 'Active'}
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-4 text-sm">
+                                                    <div>
+                                                        <p className="text-gray-500">Sign In</p>
+                                                        <p className="font-medium text-gray-900">
+                                                            {new Date(session.signInTime).toLocaleTimeString()}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Sign Out</p>
+                                                        <p className="font-medium text-gray-900">
+                                                            {session.signOutTime 
+                                                                ? new Date(session.signOutTime).toLocaleTimeString()
+                                                                : '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Duration</p>
+                                                        <p className="font-medium text-gray-900">
+                                                            {calculateDuration(session.signInTime, session.signOutTime)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {getTodaysSessions(currentUser.id).length === 0 && (
+                                            <p className="text-center text-gray-500 py-8">No sessions today</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-4">Earnings by Event</h2>
+                                    {(() => {
+                                        const { eventTotals, grandTotal } = calculatePersonnelEventTotals(currentUser.id);
+                                        const grandTotalFormatted = formatTimeWithPay(grandTotal);
+                                        
+                                        return (
+                                            <>
+                                                <div className="space-y-3 mb-4">
+                                                    {Object.entries(eventTotals).map(([eventCode, minutes]) => {
+                                                        const formatted = formatTimeWithPay(minutes);
+                                                        return (
+                                                            <div key={eventCode} className="border border-gray-200 rounded-lg p-4">
+                                                                <div className="flex justify-between items-center">
+                                                                    <div>
+                                                                        <p className="font-semibold text-gray-900">
+                                                                            {events[eventCode]?.name || eventCode}
+                                                                        </p>
+                                                                        <p className="text-sm text-gray-500">{eventCode}</p>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <p className="text-xl font-bold text-green-600">
+                                                                            ${formatted.pay}
+                                                                        </p>
+                                                                        <p className="text-sm text-gray-500">
+                                                                            {formatted.time} ({formatted.hours} hrs)
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                
+                                                {Object.keys(eventTotals).length > 0 && (
+                                                    <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+                                                        <div className="flex justify-between items-center">
+                                                            <p className="font-semibold text-green-900">Total Earnings (All Events)</p>
+                                                            <div className="text-right">
+                                                                <p className="text-2xl font-bold text-green-700">
+                                                                    ${grandTotalFormatted.pay}
+                                                                </p>
+                                                                <p className="text-sm text-green-600">
+                                                                    {grandTotalFormatted.time} ({grandTotalFormatted.hours} hrs)
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {Object.keys(eventTotals).length === 0 && (
+                                                    <p className="text-center text-gray-500 py-8">No completed sessions yet</p>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
+                        {userRole === 'admin' && (
+                            <div className="space-y-6">
+                                {getPendingCount() > 0 && (
+                                    <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-6 shadow-lg">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-yellow-400 rounded-full p-2 animate-pulse">
+                                                    <Clock className="w-6 h-6 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl font-bold text-yellow-900">Pending Approvals Required</h2>
+                                                    <p className="text-sm text-yellow-700">
+                                                        {getPendingCount()} request{getPendingCount() > 1 ? 's' : ''} awaiting your approval
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {pendingApprovals
+                                                .filter(p => p.status === 'pending')
+                                                .sort((a, b) => new Date(a.requestTime) - new Date(b.requestTime))
+                                                .map(request => (
+                                                    <div key={request.id} className="bg-white border-2 border-yellow-200 rounded-lg p-4 shadow-sm">
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-2">
+                                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                                                        request.type === 'sign-in' 
+                                                                            ? 'bg-green-100 text-green-700' 
+                                                                            : 'bg-red-100 text-red-700'
+                                                                    }`}>
+                                                                        {request.type === 'sign-in' ? 'SIGN-IN REQUEST' : 'SIGN-OUT REQUEST'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="font-bold text-gray-900 text-lg">{request.personnelName}</p>
+                                                                <p className="text-sm text-gray-600">ID: {request.personnelId}</p>
+                                                                <p className="text-sm text-gray-600 mt-1">
+                                                                    Event: <span className="font-semibold">{events[request.eventCode]?.name || request.eventCode}</span>
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-2">
+                                                                    Requested: {new Date(request.requestTime).toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => approveRequest(request.id)}
+                                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition duration-200 flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => denyRequest(request.id)}
+                                                                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold transition duration-200 flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                    Deny
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <div className="flex items-center gap-2 mb-6">
+                                        <Shield className="w-6 h-6 text-indigo-600" />
+                                        <h2 className="text-xl font-bold text-gray-900">Administrator Controls</h2>
+                                    </div>
+
+                                    <div className="mb-6 pb-6 border-b">
+                                        <button
+                                            onClick={() => toggleSection('addEvent')}
+                                            className="flex items-center justify-between w-full text-left mb-3"
+                                        >
+                                            <h3 className="text-lg font-semibold text-gray-800">Add Event Code</h3>
+                                            {expandedSections.addEvent ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </button>
+                                        
+                                        {expandedSections.addEvent && (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <input
+                                                    type="text"
+                                                    value={newEventCode}
+                                                    onChange={(e) => setNewEventCode(e.target.value)}
+                                                    placeholder="Event Code (e.g., EV001)"
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={newEventName}
+                                                    onChange={(e) => setNewEventName(e.target.value)}
+                                                    placeholder="Event Name"
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <button
+                                                    onClick={addEvent}
+                                                    className="col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition duration-200"
+                                                >
+                                                    Add Event
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mb-6 pb-6 border-b">
+                                        <button
+                                            onClick={() => toggleSection('addPersonnel')}
+                                            className="flex items-center justify-between w-full text-left mb-3"
+                                        >
+                                            <h3 className="text-lg font-semibold text-gray-800">Add Personnel</h3>
+                                            {expandedSections.addPersonnel ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </button>
+                                        
+                                        {expandedSections.addPersonnel && (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <input
+                                                    type="text"
+                                                    value={newPersonnelId}
+                                                    onChange={(e) => setNewPersonnelId(e.target.value)}
+                                                    placeholder="Personnel ID"
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={newPersonnelName}
+                                                    onChange={(e) => setNewPersonnelName(e.target.value)}
+                                                    placeholder="Full Name"
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <input
+                                                    type="password"
+                                                    value={newPersonnelPin}
+                                                    onChange={(e) => setNewPersonnelPin(e.target.value)}
+                                                    placeholder="PIN"
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <select
+                                                    value={newPersonnelRole}
+                                                    onChange={(e) => setNewPersonnelRole(e.target.value)}
+                                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                                >
+                                                    <option value="personnel">Personnel</option>
+                                                    <option value="admin">Administrator</option>
+                                                </select>
+                                                <button
+                                                    onClick={addPersonnel}
+                                                    className="col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition duration-200"
+                                                >
+                                                    Add Personnel
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mb-6 pb-6 border-b">
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-3">Active Events</h3>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {Object.values(events).map(event => (
+                                                <div key={event.code} className="bg-gray-50 px-4 py-2 rounded-lg">
+                                                    <p className="font-semibold text-gray-900">{event.code}</p>
+                                                    <p className="text-sm text-gray-600">{event.name}</p>
+                                                </div>
+                                            ))}
+                                            {Object.keys(events).length === 0 && (
+                                                <p className="col-span-2 text-center text-gray-500 py-4">No events added yet</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-3">Personnel Roster</h3>
+                                        <div className="space-y-2">
+                                            {Object.values(personnel).map(person => (
+                                                <div key={person.id} className="bg-gray-50 px-4 py-3 rounded-lg flex justify-between items-center">
+                                                    <div>
+                                                        <p className="font-semibold text-gray-900">{person.name}</p>
+                                                        <p className="text-sm text-gray-600">ID: {person.id}</p>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                        person.role === 'admin' 
+                                                            ? 'bg-indigo-100 text-indigo-700' 
+                                                            : 'bg-gray-200 text-gray-700'
+                                                    }`}>
+                                                        {person.role === 'admin' ? 'Admin' : 'Personnel'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <button
+                                        onClick={() => toggleSection('approvalHistory')}
+                                        className="flex items-center justify-between w-full text-left mb-4"
+                                    >
+                                        <h2 className="text-xl font-bold text-gray-900">Approval History</h2>
+                                        {expandedSections.approvalHistory ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                    </button>
+
+                                    {expandedSections.approvalHistory && (
+                                        <div className="space-y-2">
+                                            {pendingApprovals
+                                                .filter(p => p.status !== 'pending')
+                                                .sort((a, b) => {
+                                                    const aTime = a.status === 'approved' ? a.approvedAt : a.deniedAt;
+                                                    const bTime = b.status === 'approved' ? b.approvedAt : b.deniedAt;
+                                                    return new Date(bTime) - new Date(aTime);
+                                                })
+                                                .slice(0, 20)
+                                                .map(request => (
+                                                    <div key={request.id} className={`border rounded-lg p-3 ${
+                                                        request.status === 'approved' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                                                    }`}>
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                                        request.status === 'approved'
+                                                                            ? 'bg-green-200 text-green-800'
+                                                                            : 'bg-red-200 text-red-800'
+                                                                    }`}>
+                                                                        {request.status.toUpperCase()}
+                                                                    </span>
+                                                                    <span className="text-xs font-medium text-gray-600">
+                                                                        {request.type === 'sign-in' ? 'Sign-In' : 'Sign-Out'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="font-semibold text-gray-900">{request.personnelName}</p>
+                                                                <p className="text-xs text-gray-600">
+                                                                    {events[request.eventCode]?.name || request.eventCode}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-1">
+                                                                    {request.status === 'approved' 
+                                                                        ? `Approved by ${request.approvedBy} at ${new Date(request.approvedAt).toLocaleString()}`
+                                                                        : `Denied by ${request.deniedBy} at ${new Date(request.deniedAt).toLocaleString()}`
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            {pendingApprovals.filter(p => p.status !== 'pending').length === 0 && (
+                                                <p className="text-center text-gray-500 py-4">No approval history yet</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-xl font-bold text-gray-900">Attendance Reports</h2>
+                                        <button
+                                            onClick={exportReport}
+                                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition duration-200 text-sm"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            Export CSV
+                                        </button>
+                                    </div>
+
+                                    {/* Report Type Toggle */}
+                                    <div className="mb-5">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Report By</p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setReportType('sp')}
+                                                className={`flex-1 py-2 rounded-lg font-semibold text-sm transition duration-200 ${reportType === 'sp' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                            >
+                                                By SP
+                                            </button>
+                                            <button
+                                                onClick={() => setReportType('event')}
+                                                className={`flex-1 py-2 rounded-lg font-semibold text-sm transition duration-200 ${reportType === 'event' ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                            >
+                                                By Event/Program
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Date Range */}
+                                    <div className="mb-5">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Date Range</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                                                <input type="date" value={reportCustomStart} onChange={e => setReportCustomStart(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                                                <input type="date" value={reportCustomEnd} onChange={e => setReportCustomEnd(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* SP / Event Filter */}
+                                    {reportType === 'sp' ? (
+                                        <div className="mb-5">
+                                            <p className="text-sm font-semibold text-gray-700 mb-2">Select SP</p>
+                                            <select
+                                                value={reportSP}
+                                                onChange={e => setReportSP(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                                            >
+                                                <option value="all">All SPs</option>
+                                                {Object.values(personnel).filter(p => p.role !== 'admin').map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <div className="mb-5">
+                                            <p className="text-sm font-semibold text-gray-700 mb-2">Select Event</p>
+                                            <select
+                                                value={reportEvent}
+                                                onChange={e => setReportEvent(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-sm"
+                                            >
+                                                <option value="all">All Events</option>
+                                                {Object.values(events).map(ev => (
+                                                    <option key={ev.code} value={ev.code}>{ev.name} ({ev.code})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Preview label */}
+                                    {reportCustomStart && reportCustomEnd && (
+                                        <div className="mb-5 px-4 py-3 bg-indigo-50 rounded-lg">
+                                            <p className="text-xs text-indigo-600 font-semibold">Report Period</p>
+                                            <p className="text-sm text-indigo-900 font-medium">{reportCustomStart} → {reportCustomEnd}</p>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={generatePDF}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-200"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                        Generate PDF Report
+                                    </button>
+                                    <p className="text-xs text-gray-400 text-center mt-2">Opens print dialog — save as PDF from there</p>
+                                </div>
+
+                                {/* ── SP Invoice Generator ── */}
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="bg-green-100 rounded-lg p-2">
+                                            <svg className="w-5 h-5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        </div>
+                                        <h2 className="text-xl font-bold text-gray-900">Generate SP Invoice</h2>
+                                    </div>
+
+                                    {/* Billed To */}
+                                    <div className="mb-5 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-sm font-semibold text-gray-700">Billed To</p>
+                                            <button
+                                                onClick={() => setEditingBilledTo(!editingBilledTo)}
+                                                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                                            >
+                                                {editingBilledTo ? 'Done' : 'Edit'}
+                                            </button>
+                                        </div>
+                                        {editingBilledTo ? (
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    value={billedToName}
+                                                    onChange={e => setBilledToName(e.target.value)}
+                                                    placeholder="Organization Name"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={billedToAddress}
+                                                    onChange={e => setBilledToAddress(e.target.value)}
+                                                    placeholder="Address"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800">{billedToName}</p>
+                                                <p className="text-xs text-gray-500">{billedToAddress}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* SP Selector */}
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select SP</label>
+                                        <select
+                                            value={invoiceSP}
+                                            onChange={e => { setInvoiceSP(e.target.value); setInvoiceEvent(''); }}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
+                                        >
+                                            <option value="">Choose an SP...</option>
+                                            {Object.values(personnel).filter(p => p.role !== 'admin').map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Event Selector — filtered to events this SP has sessions in */}
+                                    <div className="mb-5">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Event</label>
+                                        <select
+                                            value={invoiceEvent}
+                                            onChange={e => setInvoiceEvent(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
+                                            disabled={!invoiceSP}
+                                        >
+                                            <option value="">Choose an event...</option>
+                                            {invoiceSP && [...new Set(
+                                                sessions
+                                                    .filter(s => s.personnelId === invoiceSP && s.signOutTime)
+                                                    .map(s => s.eventCode)
+                                            )].map(code => (
+                                                <option key={code} value={code}>{events[code]?.name || code} ({code})</option>
+                                            ))}
+                                        </select>
+                                        {invoiceSP && sessions.filter(s => s.personnelId === invoiceSP && s.signOutTime).length === 0 && (
+                                            <p className="text-xs text-amber-600 mt-1">This SP has no completed sessions yet.</p>
+                                        )}
+                                    </div>
+
+                                    {/* Preview summary */}
+                                    {invoiceSP && invoiceEvent && (() => {
+                                        const spSessions = sessions.filter(s => s.personnelId === invoiceSP && s.eventCode === invoiceEvent && s.signOutTime);
+                                        const totalMins = spSessions.reduce((acc, s) => acc + (new Date(s.signOutTime) - new Date(s.signInTime)) / 60000, 0);
+                                        const totalPay = ((totalMins / 60) * 25).toFixed(2);
+                                        return (
+                                            <div className="mb-5 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <p className="text-xs text-green-700 font-semibold">Invoice Preview</p>
+                                                        <p className="text-sm text-green-900 font-bold">#{invoiceEvent} — {personnel[invoiceSP]?.name}</p>
+                                                        <p className="text-xs text-green-700">{spSessions.length} session{spSessions.length !== 1 ? 's' : ''} • {(totalMins/60).toFixed(2)} hrs</p>
+                                                    </div>
+                                                    <p className="text-2xl font-black text-green-700">${totalPay}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <button
+                                        onClick={generateInvoice}
+                                        disabled={!invoiceSP || !invoiceEvent}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition duration-200"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                        </svg>
+                                        Generate Invoice PDF
+                                    </button>
+                                    <p className="text-xs text-gray-400 text-center mt-2">Opens print dialog — save as PDF from there</p>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm p-6">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-4">Personnel Daily Totals</h2>
+                                    <div className="space-y-3">
+                                        {Object.values(personnel).filter(p => p.role !== 'admin').map(person => {
+                                            const todayTotal = calculateTodayTotal(person.id);
+                                            const todaySessions = getTodaysSessions(person.id);
+                                            const todayMinutes = calculateTotalMinutes(todaySessions);
+                                            const todayFormatted = formatTimeWithPay(todayMinutes);
+                                            
+                                            return (
+                                                <div key={person.id} className="border border-gray-200 rounded-lg p-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <div>
+                                                            <p className="font-semibold text-gray-900">{person.name}</p>
+                                                            <p className="text-sm text-gray-500">ID: {person.id}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-2xl font-bold text-green-600">${todayFormatted.pay}</p>
+                                                            <p className="text-sm text-gray-500">
+                                                                {todayTotal} • {todaySessions.length} sessions today
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {Object.values(personnel).filter(p => p.role !== 'admin').length === 0 && (
+                                            <p className="text-center text-gray-500 py-8">No personnel added yet</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AttendanceTracker />);
+    </script>
+</body>
+</html>
